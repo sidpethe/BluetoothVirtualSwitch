@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Android Arduino Virtual Switch</string>
+    <string name="swA">Switch A</string>
+    <string name="swB">Switch B</string>
+    <string name="swC">Switch C</string>
+    <string name="swD">Switch D</string>
+    <string name="activity_title_editbtdevice">Change Bt device name</string>
+    <string name="button_set">Set</string>
+    <string name="enterBtDeviceName">Enter Bt Device Name</string>
+    <string name="editBtBtn">Edit Bt Device Name</string>
+    <string name="defaultBt">HC-05</string>
+    <string name="BtDeviceNotPaired">" is not paired. Please pair the device in System settings and retry"</string>
+</resources>
