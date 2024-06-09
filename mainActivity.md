@@ -1,1 +1,340 @@
-{"id":14692,"uuid":"5c8328cc-a1e7-4e57-92fc-78bd9f8ed5db","user_id":10028,"filename":"MainActivity.java","source":"Multiple","generated":"# MainActivity.java Documentation \ud83d\udcdd\n\nWelcome to the documentation for the `MainActivity.java` file! This file is the main activity for an Android application that establishes a Bluetooth connection to an Arduino device to control it via virtual switches.\n\n## Table of Contents \ud83d\udcd1\n1. [Overview](#overview)\n2. [Imports](#imports)\n3. [Class Variables](#class-variables)\n4. [Lifecycle Methods](#lifecycle-methods)\n   - [onDestroy](#ondestroy)\n   - [onCreate](#oncreate)\n5. [Bluetooth Methods](#bluetooth-methods)\n   - [btEnableRequestFunc](#btenablerequestfunc)\n   - [onActivityResult](#onactivityresult)\n   - [SetNewBtDevice](#setnewbtdevice)\n   - [btEnabled](#btenabled)\n   - [ConnectCall](#connectcall)\n6. [Send Method](#send-method)\n7. [Inner Classes](#inner-classes)\n   - [ConnectThread](#connectthread)\n   - [ConnectedThread](#connectedthread)\n\n## Overview \ud83e\uddd0\n`MainActivity.java` handles Bluetooth communication between an Android device and an Arduino. The app allows users to control the Arduino via toggle buttons, sending specific commands over Bluetooth.\n\n## Imports \ud83d\udce5\nThe file imports various Android and Java libraries essential for Bluetooth communication, UI handling, and data persistence.\n\n```java\nimport androidx.appcompat.app.AppCompatActivity;\nimport android.bluetooth.BluetoothAdapter;\nimport android.bluetooth.BluetoothDevice;\nimport android.bluetooth.BluetoothSocket;\nimport android.content.Context;\nimport android.content.Intent;\nimport android.content.SharedPreferences;\nimport android.os.Bundle;\nimport android.os.Handler;\nimport android.view.View;\nimport android.widget.CompoundButton;\nimport android.widget.ImageButton;\nimport android.widget.Toast;\nimport android.widget.ToggleButton;\nimport java.util.Set;\nimport java.io.IOException;\nimport java.io.InputStream;\nimport java.io.OutputStream;\nimport java.util.UUID;\n```\n\n## Class Variables \ud83d\udccb\nThe following variables are defined in the class:\n\n| Variable Name       | Type                | Description                                           |\n|---------------------|---------------------|-------------------------------------------------------|\n| `REQUEST_ENABLE_BT` | `int`               | Request code for enabling Bluetooth.                  |\n| `RESULT_BT_NAME`    | `int`               | Result code for Bluetooth device selection.           |\n| `EXTRA_MESSAGE`     | `String`            | Constant for intent extra message.                    |\n| `sock`              | `BluetoothSocket`   | Bluetooth socket for communication.                   |\n| `defaultBlue`       | `BluetoothDevice`   | Default Bluetooth device.                             |\n| `bluedaat`          | `BluetoothAdapter`  | Bluetooth adapter of the device.                      |\n\n## Lifecycle Methods \ud83d\udcc5\n\n### onDestroy\nHandles cleanup when the activity is destroyed.\n\n```java\n@Override\nprotected void onDestroy() {\n    super.onDestroy();\n    ConnectedThread connectedThread = new ConnectedThread(sock);\n    connectedThread.cancel();\n    Toast.makeText(this, \"Connection Terminated\", Toast.LENGTH_LONG).show();\n}\n```\n\n### onCreate\nInitializes the activity, sets up the UI, and handles Bluetooth enabling.\n\n```java\n@Override\nprotected void onCreate(Bundle savedInstanceState) {\n    super.onCreate(savedInstanceState);\n    setContentView(R.layout.activity_main);\n    if (!bluedaat.isEnabled()) {\n        btEnableRequestFunc();\n    } else {\n        btEnabled();\n    }\n}\n```\n\n## Bluetooth Methods \ud83d\udcf6\n\n### btEnableRequestFunc\nRequests the user to enable Bluetooth.\n\n```java\nprotected void btEnableRequestFunc() {\n    Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);\n    startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);\n}\n```\n\n### onActivityResult\nHandles the result of the Bluetooth enable request and device selection.\n\n```java\n@Override\nprotected void onActivityResult(int requestCode, int resultCode, Intent data) {\n    if(requestCode == REQUEST_ENABLE_BT) {\n        if (resultCode == RESULT_OK) {\n            btEnabled();\n        } else {\n            Toast.makeText(this, \"Bluetooth Enable Request Denied; Retrying...\", Toast.LENGTH_SHORT).show();\n        }\n    }\n    if(requestCode == RESULT_BT_NAME) {\n        SetNewBtDevice(data.getStringExtra(EXTRA_MESSAGE));\n    }\n    super.onActivityResult(requestCode, resultCode, data);\n}\n```\n\n### SetNewBtDevice\nSets a new default Bluetooth device.\n\n```java\nprivate void SetNewBtDevice(String newDeviceName) {\n    SharedPreferences sharedPref = this.getPreferences(Context.MODE_PRIVATE);\n    SharedPreferences.Editor editor = sharedPref.edit();\n    editor.putString(getString(R.string.defaultBt), newDeviceName);\n    editor.apply();\n    btEnabled();\n}\n```\n\n### btEnabled\nHandles Bluetooth enabling, device pairing, and sets up UI listeners.\n\n```java\nprotected void btEnabled() {\n    final Set<BluetoothDevice> pairedDevices = bluedaat.getBondedDevices();\n    SharedPreferences sharedPref = this.getPreferences(Context.MODE_PRIVATE);\n    String defaultBtName = sharedPref.getString(getString(R.string.defaultBt), getString(R.string.defaultBt));\n    \n    if ((pairedDevices.size()) > 0) {\n        for (BluetoothDevice HC5 : pairedDevices) {\n            if(HC5.getName().equals(defaultBtName)) {\n                defaultBlue = HC5;\n            }\n        }\n        if(defaultBlue == null) {\n            Toast.makeText(this, defaultBtName + getString(R.string.BtDeviceNotPaired), Toast.LENGTH_LONG).show();\n        } else {\n            ConnectCall(defaultBlue);\n        }\n    }\n\n    CompoundButton.OnCheckedChangeListener onCheckedChangeListener = new CompoundButton.OnCheckedChangeListener() {\n        @Override\n        public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {\n            int id = buttonView.getId();\n            Send(id, isChecked);\n        }\n    };\n\n    ToggleButton tb = findViewById(R.id.toggleButton);\n    ToggleButton tb3 = findViewById(R.id.toggleButton3);\n    ToggleButton tb2 = findViewById(R.id.toggleButton2);\n    ToggleButton tb1 = findViewById(R.id.toggleButton4);\n    tb.setOnCheckedChangeListener(onCheckedChangeListener);\n    tb1.setOnCheckedChangeListener(onCheckedChangeListener);\n    tb2.setOnCheckedChangeListener(onCheckedChangeListener);\n    tb3.setOnCheckedChangeListener(onCheckedChangeListener);\n\n    ImageButton imb = findViewById(R.id.imageButton);\n    imb.setOnClickListener(new View.OnClickListener() {\n        @Override\n        public void onClick(View v) {\n            Intent intentEditBtDeviceActivity = new Intent(MainActivity.this, EditBtDeviceActivity.class);\n            startActivityForResult(intentEditBtDeviceActivity, RESULT_BT_NAME);\n        }\n    });\n}\n```\n\n### ConnectCall\nAttempts to connect to the specified Bluetooth device.\n\n```java\nprivate void ConnectCall(BluetoothDevice HC5) {\n    ConnectThread connection = new ConnectThread(HC5);\n    connection.run();\n    sock = connection.getSocket();\n    if (sock.isConnected()) {\n        Toast.makeText(this, \"Connected\", Toast.LENGTH_LONG).show();\n    } else {\n        Toast.makeText(this, \"Unable to Connect\", Toast.LENGTH_LONG).show();\n    }\n}\n```\n\n## Send Method \ud83d\udce4\nSends data to the Arduino based on the toggle button activity.\n\n```java\npublic void Send(int id, boolean on) {\n    ConnectedThread blue = new ConnectedThread(sock);\n    switch (id) {\n        case (R.id.toggleButton2):\n            if (on) {\n                blue.write('A');\n            } else {\n                blue.write('a');\n            }\n            break;\n        case (R.id.toggleButton3):\n            if (on) {\n                blue.write('B');\n            } else {\n                blue.write('b');\n            }\n            break;\n        case (R.id.toggleButton):\n            if (on) {\n                blue.write('C');\n            } else {\n                blue.write('c');\n            }\n            break;\n        case (R.id.toggleButton4):\n            if (on) {\n                blue.write('D');\n            } else {\n                blue.write('d');\n            }\n            break;\n    }\n}\n```\n\n## Inner Classes \ud83d\udce6\n\n### ConnectThread\nHandles the Bluetooth connection process.\n\n```java\nprivate class ConnectThread extends Thread {\n    private final BluetoothSocket mmSocket;\n    private final BluetoothDevice mmDevice;\n    BluetoothAdapter bluedaat = BluetoothAdapter.getDefaultAdapter();\n\n    public ConnectThread(BluetoothDevice device) {\n        BluetoothSocket tmp = null;\n        mmDevice = device;\n        UUID MY_UUID = UUID.fromString(\"Android Arduino Virtual Switch\");\n        try {\n            tmp = device.createRfcommSocketToServiceRecord(MY_UUID);\n        } catch (IOException e) {\n        }\n        mmSocket = tmp;\n    }\n\n    public void run() {\n        bluedaat.cancelDiscovery();\n        try {\n            mmSocket.connect();\n        } catch (IOException connectException) {\n            try {\n                mmSocket.close();\n            } catch (IOException closeException) {\n            }\n        }\n    }\n\n    public BluetoothSocket getSocket() {\n        return mmSocket;\n    }\n}\n```\n\n### ConnectedThread\nManages the Bluetooth connection once established, handling data transmission.\n\n```java\nprivate class ConnectedThread extends Thread {\n    private final BluetoothSocket mmSocket;\n    private final InputStream mmInStream;\n    private final OutputStream mmOutStream;\n\n    public ConnectedThread(BluetoothSocket socket) {\n        mmSocket = socket;\n        InputStream tmpIn = null;\n        OutputStream tmpOut = null;\n        try {\n            tmpIn = socket.getInputStream();\n            tmpOut = socket.getOutputStream();\n        } catch (IOException e) {\n        }\n        mmInStream = tmpIn;\n        mmOutStream = tmpOut;\n    }\n\n    public void run() {\n        byte[] buffer = new byte[1024];\n        int bytes;\n        while (true) {\n            try {\n                bytes = mmInStream.read(buffer);\n                byte MESSAGE_READ = 0;\n                Handler mHandler = new Handler();\n                mHandler.obtainMessage(MESSAGE_READ, bytes, -1, buffer).sendToTarget();\n            } catch (IOException e) {\n                break;\n            }\n        }\n    }\n\n    public void write(char key) {\n        try {\n            mmOutStream.write(key);\n        } catch (IOException e) {\n        }\n    }\n\n    public void cancel() {\n        try {\n            mmSocket.close();\n        } catch (IOException e) {\n        }\n    }\n}\n```\n\n## Conclusion \ud83c\udfc1\nThis concludes the detailed documentation of `MainActivity.java`. This file serves as the main controller for establishing and managing Bluetooth connections, sending commands to an Arduino device, and handling user interactions through toggle buttons. The provided inner classes `ConnectThread` and `ConnectedThread` handle the underlying Bluetooth communication.\n\nFeel free to reach out for further clarification or questions! \ud83d\ude0a","created_at":"2024-06-09T03:39:16.000000Z","updated_at":"2024-06-09T03:39:16.000000Z","deleted_at":null,"model_type":1,"generation_type":0,"generation_from":0,"tag":null,"archived":0}
+# MainActivity.java Documentation 📝
+
+Welcome to the documentation for the `MainActivity.java` file! This file is the main activity for an Android application that establishes a Bluetooth connection to an Arduino device to control it via virtual switches.
+
+## Table of Contents 📑
+1. [Overview](#overview)
+2. [Imports](#imports)
+3. [Class Variables](#class-variables)
+4. [Lifecycle Methods](#lifecycle-methods)
+   - [onDestroy](#ondestroy)
+   - [onCreate](#oncreate)
+5. [Bluetooth Methods](#bluetooth-methods)
+   - [btEnableRequestFunc](#btenablerequestfunc)
+   - [onActivityResult](#onactivityresult)
+   - [SetNewBtDevice](#setnewbtdevice)
+   - [btEnabled](#btenabled)
+   - [ConnectCall](#connectcall)
+6. [Send Method](#send-method)
+7. [Inner Classes](#inner-classes)
+   - [ConnectThread](#connectthread)
+   - [ConnectedThread](#connectedthread)
+
+## Overview 🧐
+`MainActivity.java` handles Bluetooth communication between an Android device and an Arduino. The app allows users to control the Arduino via toggle buttons, sending specific commands over Bluetooth.
+
+## Imports 📥
+The file imports various Android and Java libraries essential for Bluetooth communication, UI handling, and data persistence.
+
+```java
+import androidx.appcompat.app.AppCompatActivity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothSocket;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.os.Bundle;
+import android.os.Handler;
+import android.view.View;
+import android.widget.CompoundButton;
+import android.widget.ImageButton;
+import android.widget.Toast;
+import android.widget.ToggleButton;
+import java.util.Set;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.UUID;
+```
+
+## Class Variables 📋
+The following variables are defined in the class:
+
+| Variable Name       | Type                | Description                                           |
+|---------------------|---------------------|-------------------------------------------------------|
+| `REQUEST_ENABLE_BT` | `int`               | Request code for enabling Bluetooth.                  |
+| `RESULT_BT_NAME`    | `int`               | Result code for Bluetooth device selection.           |
+| `EXTRA_MESSAGE`     | `String`            | Constant for intent extra message.                    |
+| `sock`              | `BluetoothSocket`   | Bluetooth socket for communication.                   |
+| `defaultBlue`       | `BluetoothDevice`   | Default Bluetooth device.                             |
+| `bluedaat`          | `BluetoothAdapter`  | Bluetooth adapter of the device.                      |
+
+## Lifecycle Methods 📅
+
+### onDestroy
+Handles cleanup when the activity is destroyed.
+
+```java
+@Override
+protected void onDestroy() {
+    super.onDestroy();
+    ConnectedThread connectedThread = new ConnectedThread(sock);
+    connectedThread.cancel();
+    Toast.makeText(this, "Connection Terminated", Toast.LENGTH_LONG).show();
+}
+```
+
+### onCreate
+Initializes the activity, sets up the UI, and handles Bluetooth enabling.
+
+```java
+@Override
+protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    setContentView(R.layout.activity_main);
+    if (!bluedaat.isEnabled()) {
+        btEnableRequestFunc();
+    } else {
+        btEnabled();
+    }
+}
+```
+
+## Bluetooth Methods 📶
+
+### btEnableRequestFunc
+Requests the user to enable Bluetooth.
+
+```java
+protected void btEnableRequestFunc() {
+    Intent enableBtIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+    startActivityForResult(enableBtIntent, REQUEST_ENABLE_BT);
+}
+```
+
+### onActivityResult
+Handles the result of the Bluetooth enable request and device selection.
+
+```java
+@Override
+protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    if(requestCode == REQUEST_ENABLE_BT) {
+        if (resultCode == RESULT_OK) {
+            btEnabled();
+        } else {
+            Toast.makeText(this, "Bluetooth Enable Request Denied; Retrying...", Toast.LENGTH_SHORT).show();
+        }
+    }
+    if(requestCode == RESULT_BT_NAME) {
+        SetNewBtDevice(data.getStringExtra(EXTRA_MESSAGE));
+    }
+    super.onActivityResult(requestCode, resultCode, data);
+}
+```
+
+### SetNewBtDevice
+Sets a new default Bluetooth device.
+
+```java
+private void SetNewBtDevice(String newDeviceName) {
+    SharedPreferences sharedPref = this.getPreferences(Context.MODE_PRIVATE);
+    SharedPreferences.Editor editor = sharedPref.edit();
+    editor.putString(getString(R.string.defaultBt), newDeviceName);
+    editor.apply();
+    btEnabled();
+}
+```
+
+### btEnabled
+Handles Bluetooth enabling, device pairing, and sets up UI listeners.
+
+```java
+protected void btEnabled() {
+    final Set<BluetoothDevice> pairedDevices = bluedaat.getBondedDevices();
+    SharedPreferences sharedPref = this.getPreferences(Context.MODE_PRIVATE);
+    String defaultBtName = sharedPref.getString(getString(R.string.defaultBt), getString(R.string.defaultBt));
+    
+    if ((pairedDevices.size()) > 0) {
+        for (BluetoothDevice HC5 : pairedDevices) {
+            if(HC5.getName().equals(defaultBtName)) {
+                defaultBlue = HC5;
+            }
+        }
+        if(defaultBlue == null) {
+            Toast.makeText(this, defaultBtName + getString(R.string.BtDeviceNotPaired), Toast.LENGTH_LONG).show();
+        } else {
+            ConnectCall(defaultBlue);
+        }
+    }
+
+    CompoundButton.OnCheckedChangeListener onCheckedChangeListener = new CompoundButton.OnCheckedChangeListener() {
+        @Override
+        public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+            int id = buttonView.getId();
+            Send(id, isChecked);
+        }
+    };
+
+    ToggleButton tb = findViewById(R.id.toggleButton);
+    ToggleButton tb3 = findViewById(R.id.toggleButton3);
+    ToggleButton tb2 = findViewById(R.id.toggleButton2);
+    ToggleButton tb1 = findViewById(R.id.toggleButton4);
+    tb.setOnCheckedChangeListener(onCheckedChangeListener);
+    tb1.setOnCheckedChangeListener(onCheckedChangeListener);
+    tb2.setOnCheckedChangeListener(onCheckedChangeListener);
+    tb3.setOnCheckedChangeListener(onCheckedChangeListener);
+
+    ImageButton imb = findViewById(R.id.imageButton);
+    imb.setOnClickListener(new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            Intent intentEditBtDeviceActivity = new Intent(MainActivity.this, EditBtDeviceActivity.class);
+            startActivityForResult(intentEditBtDeviceActivity, RESULT_BT_NAME);
+        }
+    });
+}
+```
+
+### ConnectCall
+Attempts to connect to the specified Bluetooth device.
+
+```java
+private void ConnectCall(BluetoothDevice HC5) {
+    ConnectThread connection = new ConnectThread(HC5);
+    connection.run();
+    sock = connection.getSocket();
+    if (sock.isConnected()) {
+        Toast.makeText(this, "Connected", Toast.LENGTH_LONG).show();
+    } else {
+        Toast.makeText(this, "Unable to Connect", Toast.LENGTH_LONG).show();
+    }
+}
+```
+
+## Send Method 📤
+Sends data to the Arduino based on the toggle button activity.
+
+```java
+public void Send(int id, boolean on) {
+    ConnectedThread blue = new ConnectedThread(sock);
+    switch (id) {
+        case (R.id.toggleButton2):
+            if (on) {
+                blue.write('A');
+            } else {
+                blue.write('a');
+            }
+            break;
+        case (R.id.toggleButton3):
+            if (on) {
+                blue.write('B');
+            } else {
+                blue.write('b');
+            }
+            break;
+        case (R.id.toggleButton):
+            if (on) {
+                blue.write('C');
+            } else {
+                blue.write('c');
+            }
+            break;
+        case (R.id.toggleButton4):
+            if (on) {
+                blue.write('D');
+            } else {
+                blue.write('d');
+            }
+            break;
+    }
+}
+```
+
+## Inner Classes 📦
+
+### ConnectThread
+Handles the Bluetooth connection process.
+
+```java
+private class ConnectThread extends Thread {
+    private final BluetoothSocket mmSocket;
+    private final BluetoothDevice mmDevice;
+    BluetoothAdapter bluedaat = BluetoothAdapter.getDefaultAdapter();
+
+    public ConnectThread(BluetoothDevice device) {
+        BluetoothSocket tmp = null;
+        mmDevice = device;
+        UUID MY_UUID = UUID.fromString("Android Arduino Virtual Switch");
+        try {
+            tmp = device.createRfcommSocketToServiceRecord(MY_UUID);
+        } catch (IOException e) {
+        }
+        mmSocket = tmp;
+    }
+
+    public void run() {
+        bluedaat.cancelDiscovery();
+        try {
+            mmSocket.connect();
+        } catch (IOException connectException) {
+            try {
+                mmSocket.close();
+            } catch (IOException closeException) {
+            }
+        }
+    }
+
+    public BluetoothSocket getSocket() {
+        return mmSocket;
+    }
+}
+```
+
+### ConnectedThread
+Manages the Bluetooth connection once established, handling data transmission.
+
+```java
+private class ConnectedThread extends Thread {
+    private final BluetoothSocket mmSocket;
+    private final InputStream mmInStream;
+    private final OutputStream mmOutStream;
+
+    public ConnectedThread(BluetoothSocket socket) {
+        mmSocket = socket;
+        InputStream tmpIn = null;
+        OutputStream tmpOut = null;
+        try {
+            tmpIn = socket.getInputStream();
+            tmpOut = socket.getOutputStream();
+        } catch (IOException e) {
+        }
+        mmInStream = tmpIn;
+        mmOutStream = tmpOut;
+    }
+
+    public void run() {
+        byte[] buffer = new byte[1024];
+        int bytes;
+        while (true) {
+            try {
+                bytes = mmInStream.read(buffer);
+                byte MESSAGE_READ = 0;
+                Handler mHandler = new Handler();
+                mHandler.obtainMessage(MESSAGE_READ, bytes, -1, buffer).sendToTarget();
+            } catch (IOException e) {
+                break;
+            }
+        }
+    }
+
+    public void write(char key) {
+        try {
+            mmOutStream.write(key);
+        } catch (IOException e) {
+        }
+    }
+
+    public void cancel() {
+        try {
+            mmSocket.close();
+        } catch (IOException e) {
+        }
+    }
+}
+```
+
+## Conclusion 🏁
+This concludes the detailed documentation of `MainActivity.java`. This file serves as the main controller for establishing and managing Bluetooth connections, sending commands to an Arduino device, and handling user interactions through toggle buttons. The provided inner classes `ConnectThread` and `ConnectedThread` handle the underlying Bluetooth communication.
+
+Feel free to reach out for further clarification or questions! 😊
